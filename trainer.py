@@ -14,15 +14,15 @@ logger = logging.getLogger(__name__)
 
 class Trainer(object):
     def __init__(self, args, train_dataset=None, dev_dataset=None, test_dataset=None):
-        self.args = args
+        self.ar gs = args
         self.train_dataset = train_dataset
         self.dev_dataset = dev_dataset
         self.test_dataset = test_dataset
 
-        self.label_lst = get_label(args)
-        self.num_labels = len(self.label_lst)
+        self.label_lst = get_label(args) # 전체 라벨이 무엇인지 불러오는 과정
+        self.num_labels = len(self.label_lst) # 전체 라벨 개수 확인
 
-        self.config_class, self.model_class, _ = MODEL_CLASSES[args.model_type]
+        self.config_class, self.model_class, _ = MODEL_CLASSES[args.model_type] # 모델 정보를 가져오는 것으로 추정
 
         self.config = self.config_class.from_pretrained(args.model_name_or_path,
                                                         num_labels=self.num_labels, 

@@ -58,4 +58,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     args.model_name_or_path = MODEL_PATH_MAP[args.model_type]
+
+    import pdb
+    pdb.set_trace()
     main(args)

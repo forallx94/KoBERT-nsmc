@@ -80,6 +80,7 @@ class NsmcProcessor(object):
     def _create_examples(self, lines, set_type):
         """Creates examples for the training and dev sets."""
         examples = []
+        # columns name 넘기고 진행 번
         for (i, line) in enumerate(lines[1:]):
             line = line.split('\t')
             guid = "%s-%s" % (set_type, i)
@@ -93,6 +94,7 @@ class NsmcProcessor(object):
     def get_examples(self, mode):
         """
         Args:
+            해당 모드의 데이터 로드
             mode: train, dev, test
         """
         file_to_read = None
@@ -104,7 +106,12 @@ class NsmcProcessor(object):
             file_to_read = self.args.test_file
 
         logger.info("LOOKING AT {}".format(os.path.join(self.args.data_dir, file_to_read)))
-        return self._create_examples(self._read_file(os.path.join(self.args.data_dir, file_to_read)), mode)
+
+        # 파일 처리 결과를 알기 쉽게 분리
+        file_path = os.path.join(self.args.data_dir, file_to_read) # 경로 설정
+        read_file_ = self._read_file(file_path) # text 파일 로드
+        data_format_ = self._create_examples(read_file_, mode) # train 형식에 맞추어 데이터 변경
+        return data_format_
 
 
 processors = {
@@ -118,6 +125,7 @@ def convert_examples_to_features(examples, max_seq_len, tokenizer,
                                  sequence_a_segment_id=0,
                                  mask_padding_with_zero=True):
     # Setting based on the current model type
+    # 주요 token 설정
     cls_token = tokenizer.cls_token
     sep_token = tokenizer.sep_token
     pad_token_id = tokenizer.pad_token_id
@@ -127,31 +135,36 @@ def convert_examples_to_features(examples, max_seq_len, tokenizer,
         if ex_index % 5000 == 0:
             logger.info("Writing example %d of %d" % (ex_index, len(examples)))
 
+        # tokenize 진행
         tokens = tokenizer.tokenize(example.text_a)
 
         # Account for [CLS] and [SEP]
         special_tokens_count = 2
-        if len(tokens) > max_seq_len - special_tokens_count:
-            tokens = tokens[:(max_seq_len - special_tokens_count)]
+        if len(tokens) > max_seq_len - special_tokens_count: # 50 - 2
+            tokens = tokens[:(max_seq_len - special_tokens_count)] # 앞의 48 토큰만 선택
 
         # Add [SEP] token
+        # token_type_ids를 위한 위치 정보를 생성
         tokens += [sep_token]
         token_type_ids = [sequence_a_segment_id] * len(tokens)
 
         # Add [CLS] token
+        # token_type_ids를 위한 위치 정보를 생성
         tokens = [cls_token] + tokens
         token_type_ids = [cls_token_segment_id] + token_type_ids
 
+        # token화된 단어를 id로 변경
         input_ids = tokenizer.convert_tokens_to_ids(tokens)
 
         # The mask has 1 for real tokens and 0 for padding tokens. Only real
         # tokens are attended to.
+        # 실 단어이면 attention_mask 1 아니면 0
         attention_mask = [1 if mask_padding_with_zero else 0] * len(input_ids)
 
         # Zero-pad up to the sequence length.
-        padding_length = max_seq_len - len(input_ids)
-        input_ids = input_ids + ([pad_token_id] * padding_length)
-        attention_mask = attention_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
+        padding_length = max_seq_len - len(input_ids) # 얼마나 비어있는지 
+        input_ids = input_ids + ([pad_token_id] * padding_length) # 남은만큼 padding 추가
+        attention_mask = attention_mask + ([0 if mask_padding_with_zero else 1] * padding_length) # 남은 attention_mask 0
         token_type_ids = token_type_ids + ([pad_token_segment_id] * padding_length)
 
         assert len(input_ids) == max_seq_len, "Error with input length {} vs {}".format(len(input_ids), max_seq_len)
@@ -180,18 +193,28 @@ def convert_examples_to_features(examples, max_seq_len, tokenizer,
 
 
 def load_and_cache_examples(args, tokenizer, mode):
+    # NsmcProcessor load
     processor = processors[args.task](args)
 
     # Load data features from cache or dataset file
+    # cached_nsmc_kobert_50_train
     cached_file_name = 'cached_{}_{}_{}_{}'.format(
         args.task, list(filter(None, args.model_name_or_path.split("/"))).pop(), args.max_seq_len, mode)
 
+    # ./data/cached_nsmc_kobert_50_train
     cached_features_file = os.path.join(args.data_dir, cached_file_name)
+
+    # 파일이 존재할 경우 
     if os.path.exists(cached_features_file):
         logger.info("Loading features from cached file %s", cached_features_file)
         features = torch.load(cached_features_file)
+
+    # 파일이 없을 경우
     else:
         logger.info("Creating features from dataset file at %s", args.data_dir)
+
+        # 데이터를 가져오는 과정
+
         if mode == "train":
             examples = processor.get_examples("train")
         elif mode == "dev":
@@ -201,11 +224,15 @@ def load_and_cache_examples(args, tokenizer, mode):
         else:
             raise Exception("For mode, Only train, dev, test is available")
 
+        #가져온 데이터를 feature로 변경
         features = convert_examples_to_features(examples, args.max_seq_len, tokenizer)
         logger.info("Saving features into cached file %s", cached_features_file)
+
+        # 변경된 feature를 저장
         torch.save(features, cached_features_file)
 
     # Convert to Tensors and build dataset
+    # 변경한 데이터를 가져와서 torch.tensor로 데이터 설정
     all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
     all_attention_mask = torch.tensor([f.attention_mask for f in features], dtype=torch.long)
     all_token_type_ids = torch.tensor([f.token_type_ids for f in features], dtype=torch.long)
